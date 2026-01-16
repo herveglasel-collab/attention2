@@ -287,7 +287,7 @@ if(tag === "post_beep" && state.lastBeep){
     cueTimePerf,
     cueTimeRelMs,
     distractorWindow: tag,
-    responded: false
+    responded: false,
     beepLevel,
   beepRaw,
   beepGainUsed,
@@ -346,11 +346,11 @@ function handleResponse(choice){
     cueTimeRelMs: cue.cueTimeRelMs,
     minuteBin: Math.floor(cue.cueTimeRelMs/60000),
     distractorWindow: cue.distractorWindow || "baseline",
-    omission: 0
+    omission: 0,
     beepLevel: cue.beepLevel ?? "",
 beepRaw: cue.beepRaw ?? "",
 beepGainUsed: cue.beepGainUsed ?? "",
-beepTimeRelMs: cue.beepTimeRelMs ?? "",
+beepTimeRelMs: cue.beepTimeRelMs ?? ""
 
     
   });
@@ -437,7 +437,7 @@ function stopRun(){
       cueTimeRelMs: p.cueTimeRelMs,
       minuteBin: Math.floor(p.cueTimeRelMs/60000),
       distractorWindow: p.distractorWindow || "baseline",
-      omission: 1
+      omission: 1,
       beepLevel: p.beepLevel ?? "",
 beepRaw: p.beepRaw ?? "",
 beepGainUsed: p.beepGainUsed ?? "",
