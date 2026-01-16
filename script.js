@@ -1,4 +1,5 @@
 // attention2 – durée variable + séquence aléatoire (type + timing)
+// + distracteur auditif (bips aléatoires) = capture attentionnelle exogène
 // Objectif: attention soutenue + coût distracteurs + lapses (omissions)
 
 const els = {
@@ -19,8 +20,8 @@ const els = {
 
 const CONFIG = {
   // Timing des essais (random)
-  minISI: 2200,        // ms
-  maxISI: 4200,        // ms
+  minISI: 2200,        // ms (délai min entre consignes)
+  maxISI: 4200,        // ms (délai max)
   pPlus: 0.5,          // proba de PLUS
   avoidLongRuns: true, // éviter trop de répétitions identiques
   maxRunLength: 3,
@@ -33,13 +34,21 @@ const CONFIG = {
   // Réponse
   minInterTapMs: 120,
 
-  // Distracteurs VISUELS (facultatifs) : on les met en "probabiliste"
-  // Ici: une opportunité toutes les 15s, avec probas séparées.
-  distractorCheckEveryMs: 15000,
+  // Distracteurs VISUELS (facultatifs) – probabilistes
+  // (si sprites absents, pas grave: ça ne plante pas)
+  distractorCheckEveryMs: 15000, // toutes les 15s, opportunité
   pStudentTurn: 0.25,
   pBirdLand: 0.20,
   pDoorOpen: 0.15,
   distractorDurationMs: 1200,
+
+  // Distracteur AUDITIF (bip) – capture attentionnelle
+  // Fenêtre régulière + tirage probabiliste (simple et efficace)
+  beepCheckEveryMs: 12000,  // toutes les 12s, opportunité
+  pBeep: 0.35,              // proba de bip à chaque fenêtre
+  beepDurationMs: 180,      // durée bip (ms)
+  beepFreqHz: 880,          // fréquence bip (Hz)
+  beepGain: 0.10            // volume (0.05 à 0.15 conseillé)
 };
 
 const state = {
@@ -55,6 +64,9 @@ const state = {
   currentCue: null,
   lastCueLabel: null,
   lastRunLength: 0,
+
+  // Distracteurs: tag appliqué à la prochaine consigne
+  pendingDistractorTag: null,
 
   // Logs
   logs: [],
@@ -90,6 +102,7 @@ function speak(text) {
   if (!CONFIG.useSpeechSynthesis) return;
   if (!("speechSynthesis" in window)) return;
 
+  // Sur certains Android, la synthèse peut couper: on reste simple.
   window.speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
   u.lang = CONFIG.speechLang;
@@ -141,9 +154,11 @@ function showSprite(el, className, durationMs){
 }
 
 function maybeTriggerVisualDistractor() {
-  // Choix exclusif simple (au plus 1 distracteur par fenêtre)
-  const r = Math.random();
   const dur = CONFIG.distractorDurationMs;
+
+  // Si pas de fichier image, l'élément existe quand même mais peut être cassé visuellement.
+  // Ce n'est pas grave. Vous pourrez uploader les sprites plus tard.
+  const r = Math.random();
 
   if (r < CONFIG.pStudentTurn) {
     showSprite(els.spriteStudent, null, dur);
@@ -158,6 +173,37 @@ function maybeTriggerVisualDistractor() {
     return "door_open";
   }
   return null;
+}
+
+// --- Bip auditif (capture exogène) ---
+function playBeep(durationMs, freqHz, gainVal) {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AudioContext();
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = "sine";
+    osc.frequency.value = freqHz;
+
+    // petite enveloppe pour éviter le "click"
+    const now = ctx.currentTime;
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, gainVal), now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + Math.max(0.02, durationMs / 1000));
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start();
+    setTimeout(() => {
+      osc.stop();
+      ctx.close();
+    }, durationMs + 30);
+  } catch {
+    // Après un premier tap, ça marche généralement.
+  }
 }
 
 function flashButton(btn, isCorrect) {
@@ -198,7 +244,7 @@ function presentCue() {
   const cueTimePerf = nowPerf();
   const cueTimeRelMs = Math.round(cueTimePerf - state.startPerf);
 
-  // Tag distracteur en cours (si on en a déclenché un juste avant)
+  // Tag distracteur appliqué à CETTE consigne (s'il y en a un)
   const distractorWindow = state.pendingDistractorTag || "baseline";
   state.pendingDistractorTag = null;
 
@@ -237,8 +283,7 @@ function scheduleNextCue() {
   }, isi);
 }
 
-function scheduleDistractorChecks() {
-  // Toutes les 15s: éventuellement un distracteur visuel.
+function scheduleVisualDistractorChecks() {
   function tick() {
     if (!state.running) return;
 
@@ -247,13 +292,32 @@ function scheduleDistractorChecks() {
 
     const tag = maybeTriggerVisualDistractor();
     if (tag) {
-      // On marque que la prochaine consigne est "post_distractor"
+      // marquer la prochaine consigne comme post_* (effet différé)
       state.pendingDistractorTag = `post_${tag}`;
     }
 
     schedule(tick, CONFIG.distractorCheckEveryMs);
   }
   schedule(tick, CONFIG.distractorCheckEveryMs);
+}
+
+function scheduleBeepChecks() {
+  function tick() {
+    if (!state.running) return;
+
+    const elapsed = nowPerf() - state.startPerf;
+    if (elapsed >= state.runDurationMs) return;
+
+    if (Math.random() < CONFIG.pBeep) {
+      playBeep(CONFIG.beepDurationMs, CONFIG.beepFreqHz, CONFIG.beepGain);
+
+      // marquer la prochaine consigne comme post_beep
+      state.pendingDistractorTag = "post_beep";
+    }
+
+    schedule(tick, CONFIG.beepCheckEveryMs);
+  }
+  schedule(tick, CONFIG.beepCheckEveryMs);
 }
 
 function handleResponse(choice) {
@@ -325,8 +389,9 @@ function startRun() {
   presentCue();
   scheduleNextCue();
 
-  // Distracteurs visuels facultatifs (déjà contrôlés)
-  scheduleDistractorChecks();
+  // Distracteurs (facultatifs)
+  scheduleVisualDistractorChecks();
+  scheduleBeepChecks();
 
   // Fin dure (sécurité)
   schedule(() => stopRun(), state.runDurationMs);
@@ -368,6 +433,7 @@ function resetAll() {
   state.logs = [];
   state.trialCount = 0;
   state.currentCue = null;
+  state.pendingDistractorTag = null;
 
   setStatus("Prêt");
   els.timer.textContent = "00.0s";
