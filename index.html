@@ -11,6 +11,21 @@
   <div style="position:fixed;top:0;left:0;z-index:9999;background:yellow;color:black;padding:6px;font-size:16px;">
   TEST INDEX MODIF OK
 </div>
+
+<label style="display:flex;gap:10px;align-items:center;">
+  <span>Mode bip</span>
+  <select id="beepMode">
+    <option value="fixed" selected>Fixe</option>
+    <option value="random3">Aléatoire (3 niveaux)</option>
+  </select>
+</label>
+
+<label style="display:flex;gap:10px;align-items:center;">
+  <span>Niveau faible/moyen/fort</span>
+  <input id="beepLow" type="number" min="0" max="100" value="20" style="width:64px;">
+  <input id="beepMid" type="number" min="0" max="100" value="35" style="width:64px;">
+  <input id="beepHigh" type="number" min="0" max="100" value="55" style="width:64px;">
+</label>
   
   <div id="app">
 
