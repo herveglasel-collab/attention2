@@ -276,6 +276,20 @@ function handleResponse(choice){
   });
 }
 
+function flashAcknowledged(btn){
+  const oldBg = btn.style.background;
+  const oldBox = btn.style.boxShadow;
+
+  btn.style.background = "rgba(140,255,140,0.95)";
+  btn.style.boxShadow = "0 0 0 10px rgba(255,255,255,0.35), 0 12px 28px rgba(0,0,0,0.35)";
+
+  schedule(() => {
+    btn.style.background = oldBg || "";
+    btn.style.boxShadow = oldBox || "";
+  }, 160);
+}
+
+
 // ---- Timer ----
 function updateTimer(){
   if(!state.running) return;
