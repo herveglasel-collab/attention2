@@ -223,7 +223,7 @@ function presentCue(){
   };
 
   setCue(`Consigne : ${label}`, "Répondez avec + / −");
-  schedule(() => setCue("Continuez…", ""), CONFIG.showCueTextMs);
+speak(label.toLowerCase());   // 🔊 dit "plus" ou "moins"  schedule(() => setCue("Continuez…", ""), CONFIG.showCueTextMs);
 
   state.trialCount += 1;
 }
