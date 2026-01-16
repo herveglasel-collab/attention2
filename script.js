@@ -488,7 +488,7 @@ function exportCSV(){
       r.cueTimeRelMs ?? "",
       r.minuteBin ?? "",
       r.distractorWindow ?? "",
-      r.omission ?? ""
+      r.omission ?? "",
       r.beepLevel ?? "",
 r.beepRaw ?? "",
 r.beepGainUsed ?? "",
