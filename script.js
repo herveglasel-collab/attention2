@@ -73,7 +73,20 @@ function clearScheduled(){
   if(state.rafId) cancelAnimationFrame(state.rafId);
   state.rafId = null;
 }
+function speak(text){
+  if(!("speechSynthesis" in window)) return;
 
+  // Important : on annule la précédente pour éviter les empilements
+  window.speechSynthesis.cancel();
+
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = "fr-FR";
+  u.rate = 1.0;
+  u.pitch = 1.0;
+  u.volume = 1.0;
+
+  window.speechSynthesis.speak(u);
+}
 function fmtSeconds(ms){
   return (ms/1000).toFixed(1).padStart(4, "0") + "s";
 }
