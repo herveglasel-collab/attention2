@@ -18,6 +18,11 @@ const els = {
   resetBtn: document.getElementById("resetBtn"),
   durationSelect: document.getElementById("durationSelect"),
   beepCountSelect: document.getElementById("beepCountSelect"),
+  beepMode: document.getElementById("beepMode"),
+beepLow: document.getElementById("beepLow"),
+beepMid: document.getElementById("beepMid"),
+beepHigh: document.getElementById("beepHigh"),
+
 };
 
 const CONFIG = {
@@ -95,6 +100,35 @@ function setStatus(t){ els.status.textContent = t; }
 function setCue(a,b=""){ els.cueLabel.textContent=a; els.cueSub.textContent=b; }
 
 function randBetween(a,b){ return a + Math.random()*(b-a); }
+
+function sliderToGain(v01){ // 0..100 -> 0.00..0.40
+  const v = Math.max(0, Math.min(100, Number(v01) || 0));
+  return (v / 100) * 0.40;
+}
+
+function pickBeepGain(){
+  const mode = els.beepMode?.value || "fixed";
+
+  if(mode === "random3"){
+    const low = Number(els.beepLow?.value ?? 20);
+    const mid = Number(els.beepMid?.value ?? 35);
+    const high = Number(els.beepHigh?.value ?? 55);
+
+    const levels = [
+      { name: "low", v: low },
+      { name: "mid", v: mid },
+      { name: "high", v: high },
+    ];
+
+    const chosen = levels[Math.floor(Math.random() * levels.length)];
+    return { gain: sliderToGain(chosen.v), level: chosen.name, raw: chosen.v };
+  }
+
+  // Mode fixe : on utilise la valeur actuelle de CONFIG.beepGain (ou un slider beepVolume si vous l'avez)
+  const vFixed = Number(document.getElementById("beepVolume")?.value ?? 35);
+  return { gain: sliderToGain(vFixed), level: "fixed", raw: vFixed };
+}
+
 
 // ---- Random PLUS/MOINS ----
 function pickCueLabel(){
@@ -178,7 +212,13 @@ function scheduleRandomBeeps(){
     const t = Math.floor(randBetween(margin, maxT));
     schedule(() => {
       if(!state.running) return;
-      playBeep();
+      const picked = pickBeepGain();
+  const old = CONFIG.beepGain;
+  CONFIG.beepGain = picked.gain;
+
+  playBeep();
+
+  CONFIG.beepGain = old;
       state.pendingTag = "post_beep"; // appliqué à la PROCHAINE consigne
     }, t);
   }
