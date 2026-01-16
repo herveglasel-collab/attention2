@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>Attention2 – Classe (durée variable)</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- Fond (image fixe) -->
+    <img id="bgImg" src="media/classroom_bg.png" alt="classe" />
+
+    <!-- Légère ombre pour lisibilité -->
+    <div id="shade"></div>
+
+    <!-- Sprites distracteurs (facultatifs) -->
+    <img id="spriteStudent" class="sprite" src="media/student_turn.png" alt="" />
+    <img id="spriteBird" class="sprite" src="media/bird.png" alt="" />
+    <img id="spriteDoor" class="sprite" src="media/door_open.png" alt="" />
+
+    <!-- HUD -->
+    <div id="hud">
+      <div id="status">Prêt</div>
+      <div id="timer">00.0s</div>
+    </div>
+
+    <!-- Bulle consigne -->
+    <div id="cueBubble" aria-live="polite">
+      <div id="cueLabel">Appuie sur + quand j'ai dit PLUS, et sur − quand j'ai dit MOINS.</div>
+      <div id="cueSub">Choisissez une durée puis touchez l’écran pour démarrer.</div>
+    </div>
+
+    <!-- Réponses -->
+    <div id="buttons">
+      <button id="btnMinus" class="resp">−</button>
+      <button id="btnPlus" class="resp">+</button>
+    </div>
+
+    <!-- Contrôles -->
+    <div id="controls">
+      <select id="durationSelect" aria-label="Durée">
+        <option value="60000">1 min</option>
+        <option value="180000">3 min</option>
+        <option value="300000">5 min</option>
+        <option value="600000" selected>10 min</option>
+      </select>
+
+      <button id="startBtn">Démarrer</button>
+      <button id="downloadBtn" disabled>Télécharger CSV</button>
+      <button id="resetBtn" disabled>Réinitialiser</button>
+    </div>
+
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
