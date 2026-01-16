@@ -1,6 +1,6 @@
 // attention2 – durée variable + séquence aléatoire (type + timing)
 // + distracteur auditif (bips aléatoires) = capture attentionnelle exogène
-// Objectif: attention soutenue + coût distracteurs + lapses (omissions)
+// Version robuste Android/Chrome : AudioContext unique + resume() au démarrage.
 
 const els = {
   status: document.getElementById("status"),
@@ -20,13 +20,13 @@ const els = {
 
 const CONFIG = {
   // Timing des essais (random)
-  minISI: 2200,        // ms (délai min entre consignes)
-  maxISI: 4200,        // ms (délai max)
-  pPlus: 0.5,          // proba de PLUS
-  avoidLongRuns: true, // éviter trop de répétitions identiques
+  minISI: 2200,
+  maxISI: 4200,
+  pPlus: 0.5,
+  avoidLongRuns: true,
   maxRunLength: 3,
 
-  // Audio (consignes)
+  // Audio consignes
   useSpeechSynthesis: true,
   speechLang: "fr-FR",
   showCueTextMs: 700,
@@ -34,21 +34,19 @@ const CONFIG = {
   // Réponse
   minInterTapMs: 120,
 
-  // Distracteurs VISUELS (facultatifs) – probabilistes
-  // (si sprites absents, pas grave: ça ne plante pas)
-  distractorCheckEveryMs: 15000, // toutes les 15s, opportunité
+  // Distracteurs visuels (facultatifs)
+  distractorCheckEveryMs: 15000,
   pStudentTurn: 0.25,
   pBirdLand: 0.20,
   pDoorOpen: 0.15,
   distractorDurationMs: 1200,
 
-  // Distracteur AUDITIF (bip) – capture attentionnelle
-  // Fenêtre régulière + tirage probabiliste (simple et efficace)
-  beepCheckEveryMs: 12000,  // toutes les 12s, opportunité
-  pBeep: 0.35,              // proba de bip à chaque fenêtre
-  beepDurationMs: 180,      // durée bip (ms)
-  beepFreqHz: 880,          // fréquence bip (Hz)
-  beepGain: 0.10            // volume (0.05 à 0.15 conseillé)
+  // Distracteur auditif (bip) – capture attentionnelle
+  beepCheckEveryMs: 12000,
+  pBeep: 0.35,
+  beepDurationMs: 180,
+  beepFreqHz: 880,
+  beepGain: 0.18, // plus audible (si trop fort, redescendre à 0.12)
 };
 
 const state = {
@@ -59,17 +57,17 @@ const state = {
   timeouts: [],
   lastTapPerf: 0,
 
-  // Essais
   trialCount: 0,
   currentCue: null,
   lastCueLabel: null,
   lastRunLength: 0,
 
-  // Distracteurs: tag appliqué à la prochaine consigne
   pendingDistractorTag: null,
-
-  // Logs
   logs: [],
+
+  // AudioContext unique
+  audioCtx: null,
+  masterGain: null,
 };
 
 function nowPerf() { return performance.now(); }
@@ -92,17 +90,12 @@ function fmtSeconds(ms) {
 }
 
 function setStatus(txt) { els.status.textContent = txt; }
-
-function setCue(main, sub="") {
-  els.cueLabel.textContent = main;
-  els.cueSub.textContent = sub;
-}
+function setCue(main, sub="") { els.cueLabel.textContent = main; els.cueSub.textContent = sub; }
 
 function speak(text) {
   if (!CONFIG.useSpeechSynthesis) return;
   if (!("speechSynthesis" in window)) return;
 
-  // Sur certains Android, la synthèse peut couper: on reste simple.
   window.speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
   u.lang = CONFIG.speechLang;
@@ -122,7 +115,6 @@ function pickCueLabel() {
   if (CONFIG.avoidLongRuns && state.trialCount >= 1) {
     const last = state.lastCueLabel;
     const runLen = state.lastRunLength || 1;
-
     if (label === last && runLen >= CONFIG.maxRunLength) {
       label = (last === "PLUS") ? "MOINS" : "PLUS";
     }
@@ -131,23 +123,72 @@ function pickCueLabel() {
 }
 
 function updateRunStats(newLabel) {
-  if (newLabel === state.lastCueLabel) {
-    state.lastRunLength = (state.lastRunLength || 1) + 1;
-  } else {
-    state.lastRunLength = 1;
-    state.lastCueLabel = newLabel;
+  if (newLabel === state.lastCueLabel) state.lastRunLength = (state.lastRunLength || 1) + 1;
+  else { state.lastRunLength = 1; state.lastCueLabel = newLabel; }
+}
+
+function cueToCorrect(label) { return (label === "PLUS") ? "+" : "-"; }
+
+// --- AudioContext : init + resume (crucial sur Android) ---
+function initAudioIfNeeded() {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+
+    if (!state.audioCtx) {
+      state.audioCtx = new AudioContext();
+      state.masterGain = state.audioCtx.createGain();
+      state.masterGain.gain.value = 1.0;
+      state.masterGain.connect(state.audioCtx.destination);
+    }
+
+    if (state.audioCtx.state === "suspended") {
+      // resume() doit idéalement suivre un geste utilisateur → startRun() est déclenché par tap/clic
+      state.audioCtx.resume();
+    }
+  } catch {
+    // silencieux
   }
 }
 
-function cueToCorrect(label) {
-  return (label === "PLUS") ? "+" : "-";
+function playBeep(durationMs, freqHz, gainVal) {
+  try {
+    if (!state.audioCtx || !state.masterGain) initAudioIfNeeded();
+    if (!state.audioCtx || !state.masterGain) return;
+
+    // En cas de suspension (Android), on tente à nouveau
+    if (state.audioCtx.state === "suspended") state.audioCtx.resume();
+
+    const ctx = state.audioCtx;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = "sine";
+    osc.frequency.value = freqHz;
+
+    // enveloppe anti "click"
+    const now = ctx.currentTime;
+    const g = Math.max(0.0001, gainVal);
+
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(g, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + Math.max(0.03, durationMs / 1000));
+
+    osc.connect(gain);
+    gain.connect(state.masterGain);
+
+    osc.start();
+    osc.stop(now + Math.max(0.05, durationMs / 1000) + 0.02);
+  } catch {
+    // silencieux
+  }
 }
 
-// --- Sprites distracteurs (facultatifs) ---
+// --- Sprites visuels (facultatifs) ---
 function showSprite(el, className, durationMs){
   if (!el) return;
   el.classList.remove("show", "birdLanding", "doorOpening");
-  void el.offsetWidth; // reflow
+  void el.offsetWidth;
   if (className) el.classList.add(className);
   el.classList.add("show");
   schedule(() => el.classList.remove("show", "birdLanding", "doorOpening"), durationMs);
@@ -155,55 +196,12 @@ function showSprite(el, className, durationMs){
 
 function maybeTriggerVisualDistractor() {
   const dur = CONFIG.distractorDurationMs;
-
-  // Si pas de fichier image, l'élément existe quand même mais peut être cassé visuellement.
-  // Ce n'est pas grave. Vous pourrez uploader les sprites plus tard.
   const r = Math.random();
 
-  if (r < CONFIG.pStudentTurn) {
-    showSprite(els.spriteStudent, null, dur);
-    return "student_turn";
-  }
-  if (r < CONFIG.pStudentTurn + CONFIG.pBirdLand) {
-    showSprite(els.spriteBird, "birdLanding", dur);
-    return "bird_land";
-  }
-  if (r < CONFIG.pStudentTurn + CONFIG.pBirdLand + CONFIG.pDoorOpen) {
-    showSprite(els.spriteDoor, "doorOpening", dur);
-    return "door_open";
-  }
+  if (r < CONFIG.pStudentTurn) { showSprite(els.spriteStudent, null, dur); return "student_turn"; }
+  if (r < CONFIG.pStudentTurn + CONFIG.pBirdLand) { showSprite(els.spriteBird, "birdLanding", dur); return "bird_land"; }
+  if (r < CONFIG.pStudentTurn + CONFIG.pBirdLand + CONFIG.pDoorOpen) { showSprite(els.spriteDoor, "doorOpening", dur); return "door_open"; }
   return null;
-}
-
-// --- Bip auditif (capture exogène) ---
-function playBeep(durationMs, freqHz, gainVal) {
-  try {
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    const ctx = new AudioContext();
-
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-
-    osc.type = "sine";
-    osc.frequency.value = freqHz;
-
-    // petite enveloppe pour éviter le "click"
-    const now = ctx.currentTime;
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, gainVal), now + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + Math.max(0.02, durationMs / 1000));
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    osc.start();
-    setTimeout(() => {
-      osc.stop();
-      ctx.close();
-    }, durationMs + 30);
-  } catch {
-    // Après un premier tap, ça marche généralement.
-  }
 }
 
 function flashButton(btn, isCorrect) {
@@ -219,9 +217,9 @@ function flashButton(btn, isCorrect) {
   }, 240);
 }
 
-// --- Coeur du moteur ---
+// --- Coeur moteur ---
 function presentCue() {
-  // Loguer omission si la consigne précédente n'a pas été répondue
+  // Omission si précédente non répondue
   if (state.currentCue && !state.currentCue.responded) {
     const prev = state.currentCue;
     state.logs.push({
@@ -244,7 +242,6 @@ function presentCue() {
   const cueTimePerf = nowPerf();
   const cueTimeRelMs = Math.round(cueTimePerf - state.startPerf);
 
-  // Tag distracteur appliqué à CETTE consigne (s'il y en a un)
   const distractorWindow = state.pendingDistractorTag || "baseline";
   state.pendingDistractorTag = null;
 
@@ -260,7 +257,6 @@ function presentCue() {
 
   setCue(`Consigne : ${label}`, "Répondez avec + / −");
   speak(label.toLowerCase());
-
   schedule(() => setCue("Continuez…", ""), CONFIG.showCueTextMs);
 
   state.trialCount += 1;
@@ -270,10 +266,7 @@ function scheduleNextCue() {
   if (!state.running) return;
 
   const elapsed = nowPerf() - state.startPerf;
-  if (elapsed >= state.runDurationMs) {
-    stopRun();
-    return;
-  }
+  if (elapsed >= state.runDurationMs) { stopRun(); return; }
 
   const isi = Math.round(randBetween(CONFIG.minISI, CONFIG.maxISI));
   schedule(() => {
@@ -286,15 +279,11 @@ function scheduleNextCue() {
 function scheduleVisualDistractorChecks() {
   function tick() {
     if (!state.running) return;
-
     const elapsed = nowPerf() - state.startPerf;
     if (elapsed >= state.runDurationMs) return;
 
     const tag = maybeTriggerVisualDistractor();
-    if (tag) {
-      // marquer la prochaine consigne comme post_* (effet différé)
-      state.pendingDistractorTag = `post_${tag}`;
-    }
+    if (tag) state.pendingDistractorTag = `post_${tag}`;
 
     schedule(tick, CONFIG.distractorCheckEveryMs);
   }
@@ -304,14 +293,11 @@ function scheduleVisualDistractorChecks() {
 function scheduleBeepChecks() {
   function tick() {
     if (!state.running) return;
-
     const elapsed = nowPerf() - state.startPerf;
     if (elapsed >= state.runDurationMs) return;
 
     if (Math.random() < CONFIG.pBeep) {
       playBeep(CONFIG.beepDurationMs, CONFIG.beepFreqHz, CONFIG.beepGain);
-
-      // marquer la prochaine consigne comme post_beep
       state.pendingDistractorTag = "post_beep";
     }
 
@@ -328,8 +314,7 @@ function handleResponse(choice) {
   state.lastTapPerf = tPerf;
 
   const cue = state.currentCue;
-  if (!cue) return;
-  if (cue.responded) return;
+  if (!cue || cue.responded) return;
   cue.responded = true;
 
   const rtMs = Math.round(tPerf - cue.cueTimePerf);
@@ -355,9 +340,7 @@ function updateTimer() {
   if (!state.running) return;
   const elapsed = nowPerf() - state.startPerf;
   els.timer.textContent = fmtSeconds(elapsed);
-  if (elapsed < state.runDurationMs) {
-    state.rafId = requestAnimationFrame(updateTimer);
-  }
+  if (elapsed < state.runDurationMs) state.rafId = requestAnimationFrame(updateTimer);
 }
 
 function startRun() {
@@ -373,6 +356,9 @@ function startRun() {
 
   state.runDurationMs = Number(els.durationSelect?.value || 600000);
 
+  // IMPORTANT: initialiser l'audio APRES un geste utilisateur (startRun est appelé par tap/clic)
+  initAudioIfNeeded();
+
   state.running = true;
   setStatus("En cours");
   setCue("Regardez la maîtresse…", "Répondez vite et juste (+ / −).");
@@ -380,20 +366,16 @@ function startRun() {
   els.downloadBtn.disabled = true;
   els.resetBtn.disabled = false;
 
-  // Démarrage temps
   state.startPerf = nowPerf();
   els.timer.textContent = "00.0s";
   updateTimer();
 
-  // Première consigne tout de suite, puis rythme aléatoire
   presentCue();
   scheduleNextCue();
 
-  // Distracteurs (facultatifs)
   scheduleVisualDistractorChecks();
   scheduleBeepChecks();
 
-  // Fin dure (sécurité)
   schedule(() => stopRun(), state.runDurationMs);
 }
 
@@ -402,7 +384,6 @@ function stopRun() {
   state.running = false;
   clearScheduled();
 
-  // Loguer omission finale si dernière consigne non répondue
   if (state.currentCue && !state.currentCue.responded) {
     const prev = state.currentCue;
     state.logs.push({
@@ -445,16 +426,8 @@ function resetAll() {
 function exportCSV() {
   const rows = [];
   rows.push([
-    "trialIndex",
-    "cueLabel",
-    "correctAnswer",
-    "choice",
-    "correct",
-    "rtMs",
-    "cueTimeRelMs",
-    "minuteBin",
-    "distractorWindow",
-    "omission"
+    "trialIndex","cueLabel","correctAnswer","choice","correct",
+    "rtMs","cueTimeRelMs","minuteBin","distractorWindow","omission"
   ].join(","));
 
   for (const r of state.logs) {
