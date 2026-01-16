@@ -208,18 +208,31 @@ function scheduleRandomBeeps(){
   const margin = 5000;
   const maxT = Math.max(margin + 1000, state.runDurationMs - margin);
 
-  for(let i=0;i<n;i++){
+  for(let i = 0; i < n; i++){
     const t = Math.floor(randBetween(margin, maxT));
+
     schedule(() => {
       if(!state.running) return;
+
       const picked = pickBeepGain();
-  const old = CONFIG.beepGain;
-  CONFIG.beepGain = picked.gain;
 
-  playBeep();
+      // Appliquer temporairement le gain choisi
+      const old = CONFIG.beepGain;
+      CONFIG.beepGain = picked.gain;
+      playBeep();
+      CONFIG.beepGain = old;
 
-  CONFIG.beepGain = old;
-      state.pendingTag = "post_beep"; // appliqué à la PROCHAINE consigne
+      // Marquer la prochaine consigne comme post-beep
+      state.pendingTag = "post_beep";
+
+      // (Optionnel mais recommandé) Mémoriser ce qui a été tiré
+      state.lastBeep = {
+        level: picked.level,  // low / mid / high / fixed
+        raw: picked.raw,      // 0..100
+        gain: picked.gain,    // 0..0.40
+        timeRelMs: t
+      };
+
     }, t);
   }
 }
