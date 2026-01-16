@@ -274,6 +274,8 @@ function handleResponse(choice){
     distractorWindow: cue.distractorWindow || "baseline",
     omission: 0
   });
+  flashAcknowledged(choice === "+" ? els.btnPlus : els.btnMinus);
+
 }
 
 function flashAcknowledged(btn){
