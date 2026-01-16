@@ -42,7 +42,8 @@
 
     <!-- Contrôles -->
 
-    <div id="beepPanel" style="
+    <!-- Contrôles -->
+<div id="beepPanel" style="
   position: fixed;
   top: 0;
   left: 0;
@@ -57,6 +58,29 @@
   align-items: center;
   flex-wrap: wrap;
 ">
+
+  <label style="display:flex;gap:8px;align-items:center;">
+    <span>Durée</span>
+    <select id="durationSelect" aria-label="Durée">
+      <option value="60000">1 min</option>
+      <option value="180000">3 min</option>
+      <option value="300000">5 min</option>
+      <option value="600000" selected>10 min</option>
+    </select>
+  </label>
+
+  <label style="display:flex;gap:8px;align-items:center;">
+    <span>Bips</span>
+    <select id="beepCountSelect" aria-label="Nombre de bips">
+      <option value="0">0</option>
+      <option value="1">1</option>
+      <option value="2">2</option>
+      <option value="3" selected>3</option>
+      <option value="4">4</option>
+      <option value="6">6</option>
+    </select>
+  </label>
+
   <label style="display:flex;gap:8px;align-items:center;">
     <span>Mode bip</span>
     <select id="beepMode">
@@ -73,50 +97,13 @@
     <span>Fort</span>
     <input id="beepHigh" type="number" min="0" max="100" value="55" style="width:64px;">
   </label>
+
+  <button id="startBtn">Démarrer</button>
+  <button id="downloadBtn" disabled>Télécharger CSV</button>
+  <button id="resetBtn" disabled>Réinitialiser</button>
+
 </div>
-<label style="display:flex;gap:8px;align-items:center;">
-  <span>Durée</span>
-  <select id="durationSelect" aria-label="Durée">
-    <option value="60000">1 min</option>
-    <option value="180000">3 min</option>
-    <option value="300000">5 min</option>
-    <option value="600000" selected>10 min</option>
-  </select>
-</label>
 
-<label style="display:flex;gap:8px;align-items:center;">
-  <span>Bips</span>
-  <select id="beepCountSelect" aria-label="Nombre de bips">
-    <option value="0">0</option>
-    <option value="1">1</option>
-    <option value="2">2</option>
-    <option value="3" selected>3</option>
-    <option value="4">4</option>
-    <option value="6">6</option>
-  </select>
-</label>
-
-      
-      <select id="durationSelect" aria-label="Durée">
-        <option value="60000">1 min</option>
-        <option value="180000">3 min</option>
-        <option value="300000">5 min</option>
-        <option value="600000" selected>10 min</option>
-      </select>
-<select id="beepCountSelect" aria-label="Nombre de bips">
-  <option value="0">0 bip</option>
-  <option value="1">1 bip</option>
-  <option value="2">2 bips</option>
-  <option value="3" selected>3 bips</option>
-  <option value="4">4 bips</option>
-  <option value="6">6 bips</option>
-</select>
-      <button id="startBtn">Démarrer</button>
-      <button id="downloadBtn" disabled>Télécharger CSV</button>
-      <button id="resetBtn" disabled>Réinitialiser</button>
-    </div>
-
-  </div>
 
   <script src="script.js"></script>
 </body>
