@@ -267,6 +267,19 @@ function presentCue(){
   const tag = state.pendingTag || "baseline";
   state.pendingTag = null;
 
+  let beepLevel = "";
+let beepRaw = "";
+let beepGainUsed = "";
+let beepTimeRelMs = "";
+
+if(tag === "post_beep" && state.lastBeep){
+  beepLevel = state.lastBeep.level;     // low / mid / high / fixed
+  beepRaw = state.lastBeep.raw;         // 0..100
+  beepGainUsed = state.lastBeep.gain;   // 0..0.40
+  beepTimeRelMs = state.lastBeep.timeRelMs; // ms depuis début (planning)
+}
+
+
   state.currentCue = {
     trialIndex: state.trialCount,
     cueLabel: label,
@@ -275,6 +288,10 @@ function presentCue(){
     cueTimeRelMs,
     distractorWindow: tag,
     responded: false
+    beepLevel,
+  beepRaw,
+  beepGainUsed,
+  beepTimeRelMs
   };
 
   setCue(`Consigne : ${label}`, "Répondez avec + / −");
@@ -330,6 +347,12 @@ function handleResponse(choice){
     minuteBin: Math.floor(cue.cueTimeRelMs/60000),
     distractorWindow: cue.distractorWindow || "baseline",
     omission: 0
+    beepLevel: cue.beepLevel ?? "",
+beepRaw: cue.beepRaw ?? "",
+beepGainUsed: cue.beepGainUsed ?? "",
+beepTimeRelMs: cue.beepTimeRelMs ?? "",
+
+    
   });
   flashAcknowledged(choice === "+" ? els.btnPlus : els.btnMinus);
 
@@ -415,6 +438,11 @@ function stopRun(){
       minuteBin: Math.floor(p.cueTimeRelMs/60000),
       distractorWindow: p.distractorWindow || "baseline",
       omission: 1
+      beepLevel: p.beepLevel ?? "",
+beepRaw: p.beepRaw ?? "",
+beepGainUsed: p.beepGainUsed ?? "",
+beepTimeRelMs: p.beepTimeRelMs ?? "",
+
     });
   }
 
@@ -443,7 +471,8 @@ function resetAll(){
 function exportCSV(){
   const header = [
     "trialIndex","cueLabel","correctAnswer","choice","correct",
-    "rtMs","cueTimeRelMs","minuteBin","distractorWindow","omission"
+    "rtMs","cueTimeRelMs","minuteBin","distractorWindow","omission","beepLevel","beepRaw","beepGainUsed","beepTimeRelMs"
+
   ];
 
   const rows = [header.join(",")];
@@ -460,6 +489,11 @@ function exportCSV(){
       r.minuteBin ?? "",
       r.distractorWindow ?? "",
       r.omission ?? ""
+      r.beepLevel ?? "",
+r.beepRaw ?? "",
+r.beepGainUsed ?? "",
+r.beepTimeRelMs ?? ""
+
     ].join(","));
   }
 
