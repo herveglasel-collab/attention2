@@ -59,6 +59,8 @@ const state = {
   pendingTag: null,     // ex: "post_beep" appliqué à la prochaine consigne
   logs: [],
 
+  lastBeep: null,
+
   // AudioContext unique
   audioCtx: null,
   masterGain: null,
