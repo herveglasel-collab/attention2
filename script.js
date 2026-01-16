@@ -1,28 +1,36 @@
-// attention2 – STABLE
-// - Durée variable (menu existant)
-// - Nombre de bips choisi avant démarrage (menu beepCountSelect)
-// - Moments des bips aléatoires (planifiés au démarrage)
-// - Séquence PLUS/MOINS aléatoire + ISI variable
-// - Omissions loggées proprement
-// - CSV complet
+// attention2 – STABLE (FULL CLEAN)
+// - Durée variable (durationSelect)
+// - Nombre de bips choisi avant démarrage (beepCountSelect)
+// - Mode bip: fixe vs random3 (beepMode + beepLow/Mid/High)
+// - Bips planifiés à des instants aléatoires
+// - PLUS/MOINS aléatoire + ISI variable
+// - Voix: "plus" / "moins"
+// - Feedback d'appui: flash vert (sans info juste/faux)
+// - Logging complet CSV + colonnes beepLevel/beepRaw/beepGainUsed/beepTimeRelMs
 
 const els = {
   status: document.getElementById("status"),
   timer: document.getElementById("timer"),
   cueLabel: document.getElementById("cueLabel"),
   cueSub: document.getElementById("cueSub"),
+
   btnPlus: document.getElementById("btnPlus"),
   btnMinus: document.getElementById("btnMinus"),
+
   startBtn: document.getElementById("startBtn"),
   downloadBtn: document.getElementById("downloadBtn"),
   resetBtn: document.getElementById("resetBtn"),
+
   durationSelect: document.getElementById("durationSelect"),
   beepCountSelect: document.getElementById("beepCountSelect"),
-  beepMode: document.getElementById("beepMode"),
-beepLow: document.getElementById("beepLow"),
-beepMid: document.getElementById("beepMid"),
-beepHigh: document.getElementById("beepHigh"),
 
+  beepMode: document.getElementById("beepMode"),
+  beepLow: document.getElementById("beepLow"),
+  beepMid: document.getElementById("beepMid"),
+  beepHigh: document.getElementById("beepHigh"),
+
+  // Optionnel: slider volume fixe (si présent)
+  beepVolume: document.getElementById("beepVolume"),
 };
 
 const CONFIG = {
@@ -38,35 +46,35 @@ const CONFIG = {
   // bip
   beepDurationMs: 180,
   beepFreqHz: 880,
-  beepGain: 0.16, // si trop fort: 0.10–0.12
+  beepGain: 0.16, // valeur par défaut (sera surchargée temporairement au bip)
 };
 
-// ---- Etat ----
 const state = {
   running: false,
   startPerf: 0,
   runDurationMs: 600000,
+
   rafId: null,
   timeouts: [],
 
   lastTapPerf: 0,
 
   trialCount: 0,
-  currentCue: null,     // consigne active (pour RT + omission)
+  currentCue: null,
   lastCueLabel: null,
   lastRunLength: 0,
 
-  pendingTag: null,     // ex: "post_beep" appliqué à la prochaine consigne
+  pendingTag: null, // "post_beep" appliqué à la prochaine consigne
   logs: [],
 
-  lastBeep: null,
+  lastBeep: null, // { level, raw, gain, timeRelMs }
 
   // AudioContext unique
   audioCtx: null,
   masterGain: null,
 };
 
-// ---- Utils ----
+// ---------------- Utils ----------------
 function nowPerf(){ return performance.now(); }
 
 function schedule(fn, ms){
@@ -80,29 +88,35 @@ function clearScheduled(){
   if(state.rafId) cancelAnimationFrame(state.rafId);
   state.rafId = null;
 }
+
+function fmtSeconds(ms){
+  return (ms/1000).toFixed(1).padStart(4, "0") + "s";
+}
+
+function setStatus(t){
+  if(els.status) els.status.textContent = t;
+}
+
+function setCue(a,b=""){
+  if(els.cueLabel) els.cueLabel.textContent = a;
+  if(els.cueSub) els.cueSub.textContent = b;
+}
+
+function randBetween(a,b){ return a + Math.random()*(b-a); }
+
+// ---------------- Speech ----------------
 function speak(text){
   if(!("speechSynthesis" in window)) return;
-
-  // Important : on annule la précédente pour éviter les empilements
   window.speechSynthesis.cancel();
-
   const u = new SpeechSynthesisUtterance(text);
   u.lang = "fr-FR";
   u.rate = 1.0;
   u.pitch = 1.0;
   u.volume = 1.0;
-
   window.speechSynthesis.speak(u);
 }
-function fmtSeconds(ms){
-  return (ms/1000).toFixed(1).padStart(4, "0") + "s";
-}
 
-function setStatus(t){ els.status.textContent = t; }
-function setCue(a,b=""){ els.cueLabel.textContent=a; els.cueSub.textContent=b; }
-
-function randBetween(a,b){ return a + Math.random()*(b-a); }
-
+// ---------------- Beep volume selection ----------------
 function sliderToGain(v01){ // 0..100 -> 0.00..0.40
   const v = Math.max(0, Math.min(100, Number(v01) || 0));
   return (v / 100) * 0.40;
@@ -126,13 +140,12 @@ function pickBeepGain(){
     return { gain: sliderToGain(chosen.v), level: chosen.name, raw: chosen.v };
   }
 
-  // Mode fixe : on utilise la valeur actuelle de CONFIG.beepGain (ou un slider beepVolume si vous l'avez)
-  const vFixed = Number(document.getElementById("beepVolume")?.value ?? 35);
+  // Mode fixe: slider beepVolume si présent, sinon 35
+  const vFixed = Number(els.beepVolume?.value ?? 35);
   return { gain: sliderToGain(vFixed), level: "fixed", raw: vFixed };
 }
 
-
-// ---- Random PLUS/MOINS ----
+// ---------------- Random PLUS/MOINS ----------------
 function pickCueLabel(){
   let l = (Math.random() < CONFIG.pPlus) ? "PLUS" : "MOINS";
 
@@ -153,7 +166,7 @@ function updateRunStats(l){
 
 function cueToCorrect(l){ return (l === "PLUS") ? "+" : "-"; }
 
-// ---- Audio (bip) : init + play ----
+// ---------------- Audio (beep) ----------------
 function initAudioIfNeeded(){
   const AudioContext = window.AudioContext || window.webkitAudioContext;
   if(!AudioContext) return;
@@ -165,7 +178,6 @@ function initAudioIfNeeded(){
     state.masterGain.connect(state.audioCtx.destination);
   }
   if(state.audioCtx.state === "suspended"){
-    // doit être appelé après un geste utilisateur -> startRun() est déclenché par tap/clic
     state.audioCtx.resume();
   }
 }
@@ -201,16 +213,15 @@ function playBeep(){
   }
 }
 
-// ---- Planifier N bips aléatoires ----
+// ---------------- Schedule random beeps ----------------
 function scheduleRandomBeeps(){
   const n = Number(els.beepCountSelect?.value || 0);
   if(!n || n <= 0) return;
 
-  // On évite les bips tout de suite au départ / tout à la fin
   const margin = 5000;
   const maxT = Math.max(margin + 1000, state.runDurationMs - margin);
 
-  for(let i = 0; i < n; i++){
+  for(let i=0; i<n; i++){
     const t = Math.floor(randBetween(margin, maxT));
 
     schedule(() => {
@@ -218,44 +229,50 @@ function scheduleRandomBeeps(){
 
       const picked = pickBeepGain();
 
-      // Appliquer temporairement le gain choisi
+      // appliquer temporairement le gain
       const old = CONFIG.beepGain;
       CONFIG.beepGain = picked.gain;
       playBeep();
       CONFIG.beepGain = old;
 
-      // Marquer la prochaine consigne comme post-beep
       state.pendingTag = "post_beep";
 
-      // (Optionnel mais recommandé) Mémoriser ce qui a été tiré
+      // mémoriser le bip pour la prochaine consigne
       state.lastBeep = {
-        level: picked.level,  // low / mid / high / fixed
-        raw: picked.raw,      // 0..100
-        gain: picked.gain,    // 0..0.40
-        timeRelMs: t
+        level: picked.level,
+        raw: picked.raw,
+        gain: picked.gain,
+        timeRelMs: t,
       };
-
     }, t);
   }
 }
 
-// ---- Présenter une consigne ----
+// ---------------- Cue presentation ----------------
+function logOmissionFromCue(p){
+  state.logs.push({
+    trialIndex: p.trialIndex,
+    cueLabel: p.cueLabel,
+    correctAnswer: p.correct,
+    choice: "",
+    correct: "",
+    rtMs: "",
+    cueTimeRelMs: p.cueTimeRelMs,
+    minuteBin: Math.floor(p.cueTimeRelMs/60000),
+    distractorWindow: p.distractorWindow || "baseline",
+    omission: 1,
+
+    beepLevel: p.beepLevel ?? "",
+    beepRaw: p.beepRaw ?? "",
+    beepGainUsed: p.beepGainUsed ?? "",
+    beepTimeRelMs: p.beepTimeRelMs ?? ""
+  });
+}
+
 function presentCue(){
-  // Si consigne précédente non répondue -> omission
+  // omission si précédente non répondue
   if(state.currentCue && !state.currentCue.responded){
-    const p = state.currentCue;
-    state.logs.push({
-      trialIndex: p.trialIndex,
-      cueLabel: p.cueLabel,
-      correctAnswer: p.correct,
-      choice: "",
-      correct: "",
-      rtMs: "",
-      cueTimeRelMs: p.cueTimeRelMs,
-      minuteBin: Math.floor(p.cueTimeRelMs/60000),
-      distractorWindow: p.distractorWindow || "baseline",
-      omission: 1
-    });
+    logOmissionFromCue(state.currentCue);
   }
 
   const label = pickCueLabel();
@@ -268,17 +285,16 @@ function presentCue(){
   state.pendingTag = null;
 
   let beepLevel = "";
-let beepRaw = "";
-let beepGainUsed = "";
-let beepTimeRelMs = "";
+  let beepRaw = "";
+  let beepGainUsed = "";
+  let beepTimeRelMs = "";
 
-if(tag === "post_beep" && state.lastBeep){
-  beepLevel = state.lastBeep.level;     // low / mid / high / fixed
-  beepRaw = state.lastBeep.raw;         // 0..100
-  beepGainUsed = state.lastBeep.gain;   // 0..0.40
-  beepTimeRelMs = state.lastBeep.timeRelMs; // ms depuis début (planning)
-}
-
+  if(tag === "post_beep" && state.lastBeep){
+    beepLevel = state.lastBeep.level;
+    beepRaw = state.lastBeep.raw;
+    beepGainUsed = state.lastBeep.gain;
+    beepTimeRelMs = state.lastBeep.timeRelMs;
+  }
 
   state.currentCue = {
     trialIndex: state.trialCount,
@@ -288,21 +304,20 @@ if(tag === "post_beep" && state.lastBeep){
     cueTimeRelMs,
     distractorWindow: tag,
     responded: false,
+
     beepLevel,
-  beepRaw,
-  beepGainUsed,
-  beepTimeRelMs
+    beepRaw,
+    beepGainUsed,
+    beepTimeRelMs
   };
 
   setCue(`Consigne : ${label}`, "Répondez avec + / −");
-speak(label.toLowerCase()); // dit "plus" ou "moins"
-schedule(() => setCue("Continuez…", ""), CONFIG.showCueTextMs);
-
+  speak(label.toLowerCase());
+  schedule(() => setCue("Continuez…", ""), CONFIG.showCueTextMs);
 
   state.trialCount += 1;
 }
 
-// ---- Enchaîner les consignes (ISI variable) ----
 function scheduleNextCue(){
   if(!state.running) return;
 
@@ -320,7 +335,21 @@ function scheduleNextCue(){
   }, isi);
 }
 
-// ---- Réponses ----
+// ---------------- Responses + feedback ----------------
+function flashAcknowledged(btn){
+  if(!btn) return;
+  const oldBg = btn.style.background;
+  const oldBox = btn.style.boxShadow;
+
+  btn.style.background = "rgba(140,255,140,0.95)";
+  btn.style.boxShadow = "0 0 0 10px rgba(255,255,255,0.35), 0 12px 28px rgba(0,0,0,0.35)";
+
+  schedule(() => {
+    btn.style.background = oldBg || "";
+    btn.style.boxShadow = oldBox || "";
+  }, 160);
+}
+
 function handleResponse(choice){
   if(!state.running) return;
 
@@ -347,39 +376,24 @@ function handleResponse(choice){
     minuteBin: Math.floor(cue.cueTimeRelMs/60000),
     distractorWindow: cue.distractorWindow || "baseline",
     omission: 0,
+
     beepLevel: cue.beepLevel ?? "",
-beepRaw: cue.beepRaw ?? "",
-beepGainUsed: cue.beepGainUsed ?? "",
-beepTimeRelMs: cue.beepTimeRelMs ?? ""
-
-    
+    beepRaw: cue.beepRaw ?? "",
+    beepGainUsed: cue.beepGainUsed ?? "",
+    beepTimeRelMs: cue.beepTimeRelMs ?? ""
   });
+
   flashAcknowledged(choice === "+" ? els.btnPlus : els.btnMinus);
-
 }
 
-function flashAcknowledged(btn){
-  const oldBg = btn.style.background;
-  const oldBox = btn.style.boxShadow;
-
-  btn.style.background = "rgba(140,255,140,0.95)";
-  btn.style.boxShadow = "0 0 0 10px rgba(255,255,255,0.35), 0 12px 28px rgba(0,0,0,0.35)";
-
-  schedule(() => {
-    btn.style.background = oldBg || "";
-    btn.style.boxShadow = oldBox || "";
-  }, 160);
-}
-
-
-// ---- Timer ----
+// ---------------- Timer ----------------
 function updateTimer(){
   if(!state.running) return;
-  els.timer.textContent = fmtSeconds(nowPerf() - state.startPerf);
+  if(els.timer) els.timer.textContent = fmtSeconds(nowPerf() - state.startPerf);
   state.rafId = requestAnimationFrame(updateTimer);
 }
 
-// ---- Run control ----
+// ---------------- Run control ----------------
 function startRun(){
   if(state.running) return;
 
@@ -392,30 +406,27 @@ function startRun(){
   state.lastRunLength = 0;
   state.pendingTag = null;
   state.lastTapPerf = 0;
+  state.lastBeep = null;
 
   state.runDurationMs = Number(els.durationSelect?.value || 600000);
 
-  // init audio after gesture
   initAudioIfNeeded();
 
   state.running = true;
   setStatus("En cours");
 
-  els.downloadBtn.disabled = true;
-  els.resetBtn.disabled = false;
+  if(els.downloadBtn) els.downloadBtn.disabled = true;
+  if(els.resetBtn) els.resetBtn.disabled = false;
 
   state.startPerf = nowPerf();
-  els.timer.textContent = "00.0s";
+  if(els.timer) els.timer.textContent = "00.0s";
   updateTimer();
 
-  // ⭐ planifier N bips
   scheduleRandomBeeps();
 
-  // démarrer consignes
   presentCue();
   scheduleNextCue();
 
-  // fin dure
   schedule(() => stopRun(), state.runDurationMs);
 }
 
@@ -424,32 +435,14 @@ function stopRun(){
   state.running = false;
   clearScheduled();
 
-  // omission finale si dernière consigne non répondue
   if(state.currentCue && !state.currentCue.responded){
-    const p = state.currentCue;
-    state.logs.push({
-      trialIndex: p.trialIndex,
-      cueLabel: p.cueLabel,
-      correctAnswer: p.correct,
-      choice: "",
-      correct: "",
-      rtMs: "",
-      cueTimeRelMs: p.cueTimeRelMs,
-      minuteBin: Math.floor(p.cueTimeRelMs/60000),
-      distractorWindow: p.distractorWindow || "baseline",
-      omission: 1,
-      beepLevel: p.beepLevel ?? "",
-beepRaw: p.beepRaw ?? "",
-beepGainUsed: p.beepGainUsed ?? "",
-beepTimeRelMs: p.beepTimeRelMs ?? "",
-
-    });
+    logOmissionFromCue(state.currentCue);
   }
 
   setStatus("Terminé");
   setCue("Terminé.", "Téléchargez le CSV.");
-  els.downloadBtn.disabled = false;
-  els.resetBtn.disabled = false;
+  if(els.downloadBtn) els.downloadBtn.disabled = false;
+  if(els.resetBtn) els.resetBtn.disabled = false;
 }
 
 function resetAll(){
@@ -459,20 +452,25 @@ function resetAll(){
   state.trialCount = 0;
   state.currentCue = null;
   state.pendingTag = null;
+  state.lastBeep = null;
 
   setStatus("Prêt");
-  els.timer.textContent = "00.0s";
-  setCue("Appuie sur + quand j'ai dit PLUS, et sur − quand j'ai dit MOINS.", "Choisissez une durée et un nombre de bips puis démarrez.");
-  els.downloadBtn.disabled = true;
-  els.resetBtn.disabled = true;
+  if(els.timer) els.timer.textContent = "00.0s";
+  setCue(
+    "Appuie sur + quand j'ai dit PLUS, et sur − quand j'ai dit MOINS.",
+    "Choisissez une durée et un nombre de bips puis démarrez."
+  );
+
+  if(els.downloadBtn) els.downloadBtn.disabled = true;
+  if(els.resetBtn) els.resetBtn.disabled = true;
 }
 
-// ---- Export CSV ----
+// ---------------- Export CSV ----------------
 function exportCSV(){
   const header = [
     "trialIndex","cueLabel","correctAnswer","choice","correct",
-    "rtMs","cueTimeRelMs","minuteBin","distractorWindow","omission","beepLevel","beepRaw","beepGainUsed","beepTimeRelMs"
-
+    "rtMs","cueTimeRelMs","minuteBin","distractorWindow","omission",
+    "beepLevel","beepRaw","beepGainUsed","beepTimeRelMs"
   ];
 
   const rows = [header.join(",")];
@@ -490,10 +488,9 @@ function exportCSV(){
       r.distractorWindow ?? "",
       r.omission ?? "",
       r.beepLevel ?? "",
-r.beepRaw ?? "",
-r.beepGainUsed ?? "",
-r.beepTimeRelMs ?? ""
-
+      r.beepRaw ?? "",
+      r.beepGainUsed ?? "",
+      r.beepTimeRelMs ?? ""
     ].join(","));
   }
 
@@ -508,21 +505,22 @@ r.beepTimeRelMs ?? ""
   URL.revokeObjectURL(url);
 }
 
-// ---- UI binding ----
+// ---------------- UI binding ----------------
 function bindUI(){
-  els.btnPlus.addEventListener("click", () => {
+  // sécurisation si un élément manque
+  els.btnPlus && els.btnPlus.addEventListener("click", () => {
     if(!state.running) { startRun(); return; }
     handleResponse("+");
   });
 
-  els.btnMinus.addEventListener("click", () => {
+  els.btnMinus && els.btnMinus.addEventListener("click", () => {
     if(!state.running) { startRun(); return; }
     handleResponse("-");
   });
 
-  els.startBtn.addEventListener("click", startRun);
-  els.downloadBtn.addEventListener("click", exportCSV);
-  els.resetBtn.addEventListener("click", resetAll);
+  els.startBtn && els.startBtn.addEventListener("click", startRun);
+  els.downloadBtn && els.downloadBtn.addEventListener("click", exportCSV);
+  els.resetBtn && els.resetBtn.addEventListener("click", resetAll);
 
   document.addEventListener("pointerdown", (e) => {
     if (e.target === els.downloadBtn || e.target === els.resetBtn || e.target === els.durationSelect || e.target === els.beepCountSelect) return;
