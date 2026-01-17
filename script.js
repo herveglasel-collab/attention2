@@ -445,6 +445,9 @@ function stopRun(){
   setCue("Terminé.", "Téléchargez le CSV.");
   if(els.downloadBtn) els.downloadBtn.disabled = false;
   if(els.resetBtn) els.resetBtn.disabled = false;
+  if(els.btnPlus) els.btnPlus.disabled = true;
+  if(els.btnMinus) els.btnMinus.disabled = true;
+
 }
 
 function resetAll(){
