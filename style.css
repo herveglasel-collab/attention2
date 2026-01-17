@@ -77,30 +77,39 @@ html, body {
   opacity: 0.9;
 }
 
-/* Boutons réponse */
-#buttons {
+/* === Boutons réponse : rectangles horizontaux, empilés verticalement, centre-bas === */
+#buttons{
   position: absolute;
-  bottom: 90px;
-  left: 10px;
-  right: 10px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  z-index: 7;
+  left: 50%;
+  bottom: 12vh;              /* proportionnel à la hauteur écran */
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;    /* empilés verticalement */
+  gap: 16px;
+  z-index: 50;
 }
 
-button.resp {
-  height: 90px;
-  font-size: 44px;
+button.resp{
+  width: min(44vw, 180px);   /* adaptatif tablette / desktop */
+  height: 84px;
+  font-size: 54px;
   font-weight: 900;
   border: none;
   border-radius: 22px;
-  background: rgba(255,255,255,0.85);
+  background: rgba(255,255,255,0.95);
   box-shadow: 0 12px 28px rgba(0,0,0,0.35);
+  touch-action: manipulation;
 }
 
-button.resp:active {
-  transform: translateY(1px);
+/* Feedback d'appui neutre */
+button.resp:active{
+  transform: scale(0.98);
+}
+
+/* Boutons désactivés (fin d'épreuve) */
+button.resp:disabled{
+  opacity: 0.45;
+  filter: grayscale(30%);
 }
 
 /* Contrôles */
