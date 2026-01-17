@@ -51,6 +51,7 @@ const CONFIG = {
 
 const state = {
   running: false,
+  finished: false, // vrai après la fin : verrouille la session,
   startPerf: 0,
   runDurationMs: 600000,
 
