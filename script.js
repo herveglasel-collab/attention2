@@ -519,29 +519,37 @@ function exportCSV(){
 }
 
 // ---------------- UI binding ----------------
+// ---------------- UI binding ----------------
 function bindUI(){
-  els.btnPlus && els.btnPlus.addEventListener("click", () => {
-  if(state.finished) return;    // session terminée = bloqué
-  if(!state.running) return;    // ne démarre jamais ici
-  handleResponse("+");
-});
 
-els.btnMinus && els.btnMinus.addEventListener("click", () => {
-  if(state.finished) return;
-  if(!state.running) return;
-  handleResponse("-");
-});
+  // + 
+  if (els.btnPlus) {
+    els.btnPlus.addEventListener("click", () => {
+      if (state.finished) return;   // session terminée = bloqué
+      if (!state.running) return;   // ne démarre jamais ici
+      handleResponse("+");
+    });
+  }
 
+  // -
+  if (els.btnMinus) {
+    els.btnMinus.addEventListener("click", () => {
+      if (state.finished) return;
+      if (!state.running) return;
+      handleResponse("-");
+    });
+  }
 
-  els.startBtn && els.startBtn.addEventListener("click", startRun);
-  els.downloadBtn && els.downloadBtn.addEventListener("click", exportCSV);
-  els.resetBtn && els.resetBtn.addEventListener("click", resetAll);
+  // Démarrer / Export / Reset
+  if (els.startBtn)    els.startBtn.addEventListener("click", startRun);
+  if (els.downloadBtn) els.downloadBtn.addEventListener("click", exportCSV);
+  if (els.resetBtn)    els.resetBtn.addEventListener("click", resetAll);
 
+  // plus de démarrage automatique au tap écran
   document.addEventListener("pointerdown", (e) => {
-  if(state.finished) return;
-  // plus de démarrage automatique}, { passive: true });
-
- 
+    if (state.finished) return;
+    // rien d'autre : volontairement neutre
+  }, { passive: true });
 }
 
 (function main(){
