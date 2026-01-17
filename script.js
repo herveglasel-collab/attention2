@@ -516,16 +516,18 @@ function exportCSV(){
 
 // ---------------- UI binding ----------------
 function bindUI(){
-  // sécurisation si un élément manque
   els.btnPlus && els.btnPlus.addEventListener("click", () => {
-    if(!state.running) { startRun(); return; }
-    handleResponse("+");
-  });
+  if(state.finished) return;    // session terminée = bloqué
+  if(!state.running) return;    // ne démarre jamais ici
+  handleResponse("+");
+});
 
-  els.btnMinus && els.btnMinus.addEventListener("click", () => {
-    if(!state.running) { startRun(); return; }
-    handleResponse("-");
-  });
+els.btnMinus && els.btnMinus.addEventListener("click", () => {
+  if(state.finished) return;
+  if(!state.running) return;
+  handleResponse("-");
+});
+
 
   els.startBtn && els.startBtn.addEventListener("click", startRun);
   els.downloadBtn && els.downloadBtn.addEventListener("click", exportCSV);
