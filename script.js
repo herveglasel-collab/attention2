@@ -462,6 +462,10 @@ function resetAll(){
   state.currentCue = null;
   state.pendingTag = null;
   state.lastBeep = null;
+  state.finished = false;
+els.btnPlus.disabled = false;
+els.btnMinus.disabled = false;
+
 
   setStatus("Prêt");
   if(els.timer) els.timer.textContent = "00.0s";
