@@ -534,9 +534,10 @@ els.btnMinus && els.btnMinus.addEventListener("click", () => {
   els.resetBtn && els.resetBtn.addEventListener("click", resetAll);
 
   document.addEventListener("pointerdown", (e) => {
-    if (e.target === els.downloadBtn || e.target === els.resetBtn || e.target === els.durationSelect || e.target === els.beepCountSelect) return;
-    if (!state.running) startRun();
-  }, { passive: true });
+  if(state.finished) return;
+  // plus de démarrage automatique}, { passive: true });
+
+ 
 }
 
 (function main(){
