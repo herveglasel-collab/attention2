@@ -434,6 +434,7 @@ function startRun(){
 function stopRun(){
   if(!state.running) return;
   state.running = false;
+  state.finished = true;
   clearScheduled();
 
   if(state.currentCue && !state.currentCue.responded){
