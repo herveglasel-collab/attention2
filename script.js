@@ -397,6 +397,10 @@ function updateTimer(){
 // ---------------- Run control ----------------
 function startRun(){
   if(state.running) return;
+  state.finished = false;
+  els.btnPlus.disabled = false;
+  els.btnMinus.disabled = false;
+
 
   clearScheduled();
 
